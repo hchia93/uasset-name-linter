@@ -1,253 +1,306 @@
 # uasset-name-linter
 
+**English** | [中文](readme-cn.md)
+
 ![Claude Code](https://img.shields.io/badge/Claude_Code-black?style=flat&logo=anthropic&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)
 ![Unreal Engine 5.7](https://img.shields.io/badge/Unreal_Engine-5.7-blue?logo=unrealengine&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-针对 Unreal Engine `.uasset` 和 `.umap` 文件的命名规范校验器。
+A naming convention validator for Unreal Engine `.uasset` and `.umap` files.
 
-扫描 UE 项目的 `Content/` 目录，按可配置的规则对每一个 asset 文件名分类，输出机器可读的 INI 数据和给团队看的 HTML 报告。设计上与 VCS pre-commit hook 配合，让不合规命名在进入项目前就被拦下。
+It crawls a UE project's `Content/` folder, classifies every asset filename against a configurable rule, and produces machine-readable INI buckets plus a team-facing HTML report. Designed to be wired into a VCS pre-commit hook so unconventional names cannot enter the project in the first place.
 
-## 它解决什么问题
+## What problem it solves
 
-Asset 命名漂移会让下游一切变难：
+Asset naming drift makes everything downstream worse:
 
-- 基于正则的工具变脆弱（`Footstep1` vs `Footstep_01` vs `FootstepA`）
-- Content Browser 过滤失效（`SM_Player_Body` 能聚拢，`SM_Body1` 不能）
-- 字典序排序在未补零的索引上崩坏（`_1, _10, _2`）
-- 派生 Material Instance 的链路失去归属信息
-- Asset 审计被迫依赖目录结构而非命名本身
+- Regex-based tooling becomes fragile (`Footstep1` vs `Footstep_01` vs `FootstepA`)
+- Content Browser filtering breaks (`SM_Player_Body` clusters, `SM_Body1` does not)
+- Lexicographic sort fails on un-padded indices (`_1`, `_10`, `_2`)
+- Material Instance derivation chains lose ownership info
+- Asset audits become path-dependent rather than name-dependent
 
-这个工具在结构性问题积累之前就抓住它们，并且只检查 filename，不解析 `.uasset` 二进制内容，所以速度快且无外部依赖。
+This tool catches the structural problems before they accumulate, and it works per-name without parsing `.uasset` binary content, so it stays fast and dependency-free.
 
-## 它如何解决
+## How it solves it
 
-只用一份命名规则贯穿三个使用面：
+A single rule set drives three usage surfaces:
 
-1. **本地扫描**：手动跑 `validator.py`，得到 verified / violation / pending 三个 bucket
-2. **团队报告**：跑 `make-report.py` 生成 HTML，按提交者分组列出每个人的修名清单
-3. **VCS 拦截**：把 `pre-commit.bat` 装在 SVN 服务器，新增的违规命名直接被拒绝 commit
+1. **Local scan**: run `validator.py` to get verified / violation / pending buckets
+2. **Team report**: run `make-report.py` to generate an HTML report grouped by author, top 3 wear medals
+3. **VCS interception**: install `pre-commit.bat` on the SVN server so violating new names are rejected at commit time
 
-规则定义集中在 `src/rules.py`，内置 self-test，改规则后跑一下就知道有没有破坏现有判定。
+Rule definitions live in `src/rules.py`. Each detector has a stable r-id (r1, r2, ...) and the file ships with a built-in self-test runnable as `python src/rules.py`.
 
-## 命名规则
+## The Rule
 
 ```
 <Prefix>_<Name>[_<Variant>][_<Index>]
-  Prefix  : [A-Z]+               例如 SM, T, BP, MI, SFX
-  Name    : Token(_Token)*       例如 Player, Player_Body, Boss_Attack
-  Token   : PascalCase chunk ([A-Z][a-z]+) 或全大写缩写 ([A-Z]{2,})
-  Variant : 单个大写字母 [A-Z]    例如 _A
-  Index   : 至少 2 位数字 [0-9]{2,}    例如 _01
+  Prefix  : [A-Z]+               e.g. SM, T, BP, MI, SFX
+  Name    : Token(_Token)*       e.g. Player, Player_Body, Boss_Attack
+  Token   : PascalCase chunk ([A-Z][a-z]+) or all-caps acronym ([A-Z]{2,})
+  Variant : single uppercase letter [A-Z]    e.g. _A
+  Index   : 2+ digits [0-9]{2,}              e.g. _01
 ```
 
-### 接受
+### Accepted
 
-| 名字 | 说明 |
+| Name | Notes |
 |---|---|
-| `SM_Player` | 前缀 + 名字，无 variant，无 index |
-| `SM_Player_01` | 前缀 + 名字 + index |
-| `SM_Player_A` | 前缀 + 名字 + variant |
-| `SM_Player_A_01` | 前缀 + 名字 + variant + index |
-| `SM_Player_Body_L_02` | 多 token 名字 |
-| `T_UI_Button` | 缩写 token 与 PascalCase 混用 |
-| `BP_HUDIcon` | 缩写 + PascalCase 拼接 |
-| `SM_BossAI_01` | PascalCase 结尾接缩写 |
+| `SM_Player` | Prefix + name, no variant, no index |
+| `SM_Player_01` | Prefix + name + index |
+| `SM_Player_A` | Prefix + name + variant |
+| `SM_Player_A_01` | Prefix + name + variant + index |
+| `SM_Player_Body_L_02` | Multi-token name |
+| `T_UI_Button` | Acronym token mixed with PascalCase |
+| `BP_HUDIcon` | Acronym + PascalCase token |
+| `SM_BossAI_01` | PascalCase ending in acronym |
 
-### 拒绝
+### Rejected (with r-id and auto-suggestion)
 
-| 名字 | 原因 | 自动建议 |
-|---|---|---|
-| `Test1` | 缺前缀分隔符 | `Test_01` |
-| `SM_Test1` | 索引黏在文本上 | `SM_Test_01` |
-| `SM_TestA` | variant 黏在名字上 | `SM_Test_A` |
-| `SM_Test_1` | 索引必须补零 | `SM_Test_01` |
-| `SM_Test_1_A` | variant 必须在 index 之前 | `SM_Test_A_01` |
-| `BP_Prefab_Block_03B` | variant 黏在 index 后面 | `BP_Prefab_Block_B_03` |
-| `MyGame_ArtPush_HeartIcon` | 前缀必须全大写 | （需人工） |
-| `Sample__Small_Cymbal` | 双下划线 | `Sample_Small_Cymbal` |
-| `Slash-Attack-L_v01` | 不允许连字符 | `Slash_Attack_L_v_01` |
-| `MF_DynamicSCurve` | 单字母大写卡在 PascalCase 中间 | （需人工） |
-| `mat_1` | token 小写开头 | （需人工） |
+| r-id | Name | Reason | Auto-suggestion |
+|---|---|---|---|
+| r1  | `Slash-Attack-L_v01` | hyphen not allowed | `Slash_Attack_L_V_01` |
+| r2  | `Sample__Small_Cymbal` | double underscore | `Sample_Small_Cymbal` |
+| r3  | `attackDodge` | no prefix separator | `XX_AttackDodge` |
+| r3  | `BiteIcon` | no prefix separator | `XX_BiteIcon` |
+| r4  | `MyGame_ArtPush_HeartIcon` | prefix must be all uppercase | (needs human) |
+| r5  | `SW_bite` | lowercase token start | `SW_Bite` |
+| r6  | `SM_Test_01_A` | variant must come before index | `SM_Test_A_01` |
+| r7  | `BP_Prefab_Block_03B` | variant fused after index | `BP_Prefab_Block_B_03` |
+| r8  | `SM_TestA` | variant fused into name | `SM_Test_A` |
+| r9  | `L_WhiteBox_Sub_01PoolRoom` | digit fused with following text | `L_WhiteBox_Sub_01_PoolRoom` |
+| r10 | `SM_Footstep1` | index fused into trailing text | `SM_Footstep_01` |
+| r11 | `SM_Test_1` | index must be zero-padded | `SM_Test_01` |
+| r12 | `MF_DynamicSCurve` | lone single uppercase in middle | (needs human) |
+| r13 | `MF_00_FlatNormal` | leading digit token after prefix (TBD) | (needs human) |
+| r14 | `Box_5C5F67FD` | UE-generated BSP brush hash name | (needs human, rename based on usage) |
+| r99 | (rare structures) | unknown structure | (needs human) |
 
-标记"需人工"的 case 不能自动改名，因为修复需要语义判断（确定的前缀是什么、卡住的字母代表的真实词是什么等）。
+Conventions:
 
-完整的检测器集合在 `src/rules.py`，所有 case 由文件内的 self-test 覆盖：
+- **r-ids are permanently stable**. Reason text may change, but the r-id never gets reassigned. If a rule is removed, its r-id stays reserved as a placeholder and is never reused.
+- **`XX_` is a placeholder prefix**. The r3 auto-suggestion prepends `XX_` to indicate "real prefix needed here". The user is expected to replace `XX` with the appropriate type prefix (`SM_`, `T_`, `BP_`, etc).
+- **(needs human)** cases cannot be auto-renamed because the fix requires semantic input (the correct prefix, what a stuck letter actually represents, the actual purpose of a generated brush, etc).
+- **r13** is a pending TBD, not a confirmed violation. Each project decides whether to accept this pattern.
+
+The complete detector set lives in `src/rules.py` and is covered by an in-file self-test:
 
 ```bash
 python src/rules.py
 ```
 
-## 目录结构
+## Layout
 
 ```
 uasset-name-linter/
-  README.md
-  pre-commit.bat                 VCS hook 入口（Windows）
+  README.md / readme-cn.md
+  LICENSE
+  pre-commit.bat                 VCS hook entry (Windows)
   Config/
-    config.ini                   输出位置 + 可选项目根目录覆盖
+    config.ini                   Output location + optional project root override
   rules/
-    ignores.ini                  路径子串忽略列表
+    ignores.ini                  Path substring ignore list
   src/
-    rules.py                     命名规则唯一真相
-    validator.py                 项目扫描，写 export/verified/violation
-    make-report.py               读输出，查 VCS，写 report.html
-    vcs-hook.py                  pre-commit hook 实现
+    rules.py                     Single source of truth for naming rules + r-ids + suggestions
+    validator.py                 Project scan, writes export/verified/violation
+    make-report.py               Reads outputs, queries VCS, writes report.html
+    vcs-hook.py                  Pre-commit hook implementation
 ```
 
-输出生成到 `<UEProject>/Saved/Tools/UAssetNameLinter/`，受 UE 标准的 `Saved/` 忽略保护，不会被 VCS 追踪。
+Output is generated to `<UEProject>/Saved/Tools/UAssetNameLinter/`, protected by UE's standard `Saved/` ignore convention so it won't be tracked by VCS.
 
-## 安装
+## Installation
 
-把整个 `uasset-name-linter/` 文件夹放进你的 UE 项目下的 `Tools/`：
+Drop the entire `uasset-name-linter/` folder into your UE project's `Tools/` directory:
 
 ```
 <UEProject>/
-  Content/                       必须存在
+  Content/                       must exist
   *.uproject
   Tools/
-    UAssetNameLinter/            ← 这里（PascalCase 文件夹名跟 plugin 视觉对齐）
+    UAssetNameLinter/            ← here (PascalCase folder name to mirror plugin convention)
 ```
 
-要求：Python 3.8+，无第三方依赖。
+Requirements: Python 3.8+. No third-party dependencies.
 
-`validator.py` 默认会自动从脚本位置往上找 `*.uproject` 文件来定位项目根目录。如果要在 UE 项目之外跑，传 `--project-root <path>`。
+`validator.py` defaults to auto-detecting the project root by walking up from the script location looking for a `*.uproject` file. To run against a different project, pass `--project-root <path>`.
 
-## 使用方法
+## Usage
 
-### 扫描项目
+### Scan the project
 
 ```bash
 python src/validator.py
 ```
 
-爬 `Content/`，分类每个名字，输出三份 INI：
+Crawls `Content/`, classifies every name, writes three INIs:
 
-- `output/export.ini` — 本次跑到的所有 asset 名字（含路径）
-- `output/verified.ini` — 通过规则的名字
-- `output/violation.ini` — 违规名字 + 自动建议
+- `output/export.ini` — every asset name found this run, plus the ignored lists and meta
+- `output/verified.ini` — names that passed the rule
+- `output/violation.ini` — names that failed, with auto-suggestions
 
-控制台打印通过 / 违规计数。退出码 `0` 表示零违规，`1` 表示有违规。
+Console prints pass/violation counts. Exit code is `0` for zero violations, `1` if any violation exists.
 
-### 生成团队报告
+### Generate the team report
 
 ```bash
 python src/make-report.py
 ```
 
-读 validator 的输出，对每个违规文件查 VCS 的最后修改作者，生成 `output/report.html`。每个人有自己的"待修清单"，按违规原因分组，每条都附自动建议。
+Reads the validator outputs, queries VCS for the last-modified author of each violating file, and writes `output/report.html`. Each contributor gets an action list grouped by violation reason with auto-suggestions next to each entry. The author table places 🥇🥈🥉 next to the top 3 contributors and 🫨 next to everyone else.
 
 ### Pre-commit hook
 
-把 `pre-commit.bat` 放进 SVN 服务器的 `<repo>/hooks/` 目录。它调用 `src/vcs-hook.py`，在 transaction 中：
+Place `pre-commit.bat` in your SVN server's `<repo>/hooks/` directory. It calls `src/vcs-hook.py`, which on each transaction:
 
-1. 检查 commit message 是否含 `[skip-lint]`，命中则放行
-2. 过滤 `A` 状态的 `.uasset` / `.umap` 路径
-3. 对每个名字跑分类，遇到违规拒绝 commit
+1. Skips the check if the commit message contains `[skip-lint]`
+2. Filters added (`A`) `.uasset` and `.umap` paths
+3. Classifies each name and rejects the commit on any violation
 
-Hook 只检查新增文件，所以存量永远不会被回查。Rename（SVN 里是 `D + A`）会触发，因为 rename 本来就是顺手清理命名的好时机。
+The hook only inspects added files, so existing assets are never re-evaluated. Renaming an asset (`D + A` in SVN terms) does trigger the check, which is intentional: a rename is the natural moment to fix the name.
 
-目前只支持 SVN，Git 支持计划中。
+Currently SVN-only. Git support is planned.
 
-## 配置
+## Configuration
 
 ### `Config/config.ini`
 
 ```ini
-# 输出位置，相对于自动检测出的 project root（最近的 *.uproject）
+# Output location, resolved relative to the auto-detected project root (nearest *.uproject)
 [output]
 path = Saved/Tools/UAssetNameLinter
 
-# 可选：显式覆盖 project root
-# 设置后会跳过 .uproject 自动检测
-# 适合 CI、test、UE 项目之外的场景
+# Optional: explicit project root override.
+# When set, disables auto-detection of .uproject.
+# Useful for CI, tests, or running outside a UE project.
 # [paths]
 # project_root = D:/SomeProject
 ```
 
 ### `rules/ignores.ini`
 
-按行写要忽略的路径子串，大小写敏感。任何 project-relative 路径包含其中一行的 asset 都不会被分类。
+Newline-separated path substrings, case-sensitive. Any asset whose project-relative path contains one of these substrings is excluded from classification.
 
 ```ini
-# 注释以 # 开头
+# Comments start with #
 TempContent
 ThirdPartyPack
 _GENERATED
 ```
 
-`__External*`（UE5 World Partition 自动生成的目录）在 `validator.py` 里硬编码跳过，不能由 ignores.ini 关闭。
+**Hardcoded skips** (in `validator.py`, always applied regardless of this file):
 
-## 输出格式
+| Pattern | Reason |
+|---|---|
+| `__External*` | UE5 World Partition external actor folders |
+| `Content/Splash/` | UE-generated splash screen folder |
+| `ProjectThumbnail.uasset` | UE-generated project thumbnail |
+
+These three are universal UE conventions present in every project, so `ignores.ini` cannot turn them back on.
+
+## Output Format
 
 ### `verified.ini` / `violation.ini`
 
-按检测原因分 section。每行一个名字，suggestion 如果存在就作为 value。
+Sections grouped by r-id. One name per line, with the suggestion as the value when available.
 
 ```ini
-[index fused into text (need _NN separator)]
+[r1: hyphen not allowed]
+Slash-Attack-L_v01 = Slash_Attack_L_V_01
+
+[r10: index fused into text (need _NN separator)]
 SM_Footstep1 = SM_Footstep_01
 SM_Tile12 = SM_Tile_12
 
-[double underscore]
+[r2: double underscore]
 Sample__Small_Cymbal = Sample_Small_Cymbal
 
-[TBD: leading digit token after prefix]
+[TBD: r13: leading digit token after prefix]
 MF_00_FlatNormal
 M_00_Basic
 ```
 
-约定：
+Conventions:
 
-- `[reason]` section = 已确认违规
-- `[TBD: reason]` section = 规则标到了，但项目层面尚未拍板要不要算违规
-- 空 value（`name =`）= 没有自动建议，需要人工命名
+- `[rN: ...]` section = confirmed violation
+- `[TBD: rN: ...]` section = rule flagged it, but the project hasn't decided whether it counts as a violation
+- Empty value (`name =`) = no auto-suggestion available, needs human input
+- Bare name lines (no `=`) = TBD section format
 
 ### `export.ini`
 
-本次扫描到的所有 asset 名字，附 project-relative 路径，供 diff 对比和外部脚本消费：
+The full data dump for this run, four sections:
 
 ```ini
+[meta]
+generated_at = 2026-04-10 19:06:39
+total_paths = 992
+unique_names = 972
+ignored_assets = 6865
+ignored_dirs = 7
+verified = 642
+violation = 317
+pending = 13
+
 [paths]
 SM_Player = Content/Asset/SM_Player.uasset
 SM_Footstep1 = Content/Audio/SM_Footstep1.uasset
+
+[ignored_dirs]
+Content/InputGlyph
+Content/TempContent
+Content/__ExternalActors__
+
+[ignored_assets]
+Content/InputGlyph/SGamepad/Default/T_S_A.uasset
+Content/InputGlyph/SGamepad/Default/T_S_LB.uasset
+...
 ```
+
+`make-report.py` reads `[meta]` for the summary stats, `[paths]` for the name→path lookup, and `[ignored_*]` for the foldable ignored lists.
 
 ### `report.html`
 
-浏览器可渲染的团队报告，包含：
+Browser-renderable team report. Structure:
 
-- 总览（违规数量、TBD 数量）
-- 按作者排序的违规计数表
-- 按原因排序的违规分类表
-- Top 20 违规最严重的目录
-- 每个作者的待修清单（按原因分组，每条附建议）
+- **Title** `<code>.uasset</code> Name Linter Report` plus a generated timestamp (precise to seconds)
+- **Header stats** `Total Scanned: N assets`, `Ignored: N assets and N directories`
+- **Foldable Ignored Directories** full path list
+- **Foldable Ignored Assets** full path list (scrollable, often very long)
+- **Summary** verified / violation / TBD with percentages
+- **Violations by Author** table sorted by file count, leftmost column: 🥇🥈🥉 for top 3, 🫨 for rank 4+
+- **Violations by Reason** table sorted by r-id
+- **Top 20 Dirty Directories** worst offending directories
+- **Per-Author Action Lists** each author wrapped in a `<details open>` block, sub-grouped by r-id, with auto-suggestions for every entry
 
-## 扩展规则
+## Extending the Rules
 
-规则逻辑刻意压在单文件里没有抽象层，加 detector 是 read-and-edit 而不是 browse-and-trace。
+Rule logic is intentionally a single file with no abstraction layers, so adding a detector is read-and-edit, not browse-and-trace.
 
-1. 打开 `src/rules.py`
-2. 加新的正则常量
-3. 在 `classify()` 里加一条分支返回 `(VIOLATION, '<reason>')`
-4. （可选）给 `suggest_fix()` 加一个变换，实现 auto rename
-5. 在文件底部的 self-test 列表里加 accept / reject case
-6. 跑 `python src/rules.py` 验证全部 case 通过
-7. 重新跑 `python src/validator.py`
+1. Open `src/rules.py`
+2. Append a new r-id to the `REASONS` dict (**always append, never reuse old ids**)
+3. Add a new regex constant
+4. Add a branch in `classify()` returning `(VIOLATION, 'rNN')`
+5. (Optional) Add a transformation to `suggest_fix()` for auto-rename
+6. Add accept / reject cases to the self-test list at the bottom, with the expected r-id
+7. Run `python src/rules.py` to verify all cases pass
+8. Re-run `python src/validator.py`
 
-## 已知限制
+## Known Limitations
 
-- **单字母 token 不允许在名字中间**。包含单字母 token 的资源包（input glyph 贴图集合 `T_S_A`、`T_X_LB` 等）需要通过 `ignores.ini` 排除。
-- **混合大小写缩写**（`AoE`、`IoT`、`MoBA`）会被拒。请用全大写（`AOE`）或纯 PascalCase（`Aoe`）。
-- **前缀后立刻跟数字 token**（`MF_00_FlatNormal`）目前归类为 TBD，没有自动建议。这是不是合法 marketplace 风格由各项目自决。
-- **Texture channel 后缀**（`_N`、`_D`、`_M`、`_R`、`_AO`、`_ORM`、`_RGH` 等）目前会被解析成 `Variant` slot。语法上能通过，但语义上 channel 标记和变体是两种不同的东西。规划中：为 `T_` 前缀引入专属的 channel slot，让 `T_Something_N` 和 `T_Something_D` 被识别为同一资源的不同 channel，而不是 variant。
-- **自动建议是 best-effort**。对于多重错误叠加的名字，一遍 pipeline 可能改不到完全合规；改完后重跑 validator 检查残留。
+- **Mixed-case acronyms** (`AoE`, `IoT`, `MoBA`) are rejected. Use either all-caps (`AOE`) or pure PascalCase (`Aoe`)
+- **r13 (leading digit token after prefix)** is currently classified as TBD with no auto-suggestion. Whether this is acceptable as a marketplace convention is project-specific
+- **Texture channel suffixes** (`_N`, `_D`, `_M`, `_R`, `_AO`, `_ORM`, `_RGH`, etc) are currently parsed as the `Variant` slot. While syntactically valid, channel markers and variants are semantically distinct. Planned: introduce a dedicated channel slot for the `T_` prefix family so `T_Something_N` and `T_Something_D` are recognized as different channels of the same asset rather than variants
+- **Asset packs containing single-letter tokens** (input glyph atlases like `T_S_A`, `T_X_LB`) need to be excluded via `ignores.ini`, because single-letter tokens are syntactically indistinguishable from the variant slot
+- **r3 auto-suggestions are placeholders**. The `XX` in `XX_AttackDodge` is not a real prefix; the user must manually replace it with the correct type prefix
+- **Auto-suggestion is best-effort**. For names with multiple stacked errors, a single pipeline pass may not produce a fully canonical result; re-run the validator after applying the fix to check for residual issues
 
-## 状态
+## Status
 
-私用阶段，活跃 UE5 项目实战中。规则会随新边界 case 出现而继续演化。
+Private, used in an active UE5 project. Rules continue to evolve as new edge cases surface.
 
 ## License
 
-MIT，详见 [LICENSE](LICENSE)。
+MIT, see [LICENSE](LICENSE).
