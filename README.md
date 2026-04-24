@@ -1,6 +1,6 @@
 # uasset-name-linter
 
-**English** | [中文](readme-cn.md)
+**English** | [中文](README_CN.md)
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-black?style=flat&logo=anthropic&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)
@@ -95,7 +95,7 @@ python src/rules.py
 
 ```
 uasset-name-linter/
-  README.md / readme-cn.md
+  README.md / README_CN.md
   LICENSE
   pre-commit.bat                 VCS hook entry (Windows)
   Config/
