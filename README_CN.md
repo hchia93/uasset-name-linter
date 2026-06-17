@@ -109,7 +109,7 @@ uasset-name-linter/
     vcs-hook.py                  pre-commit hook 实现
 ```
 
-输出生成到 `<UEProject>/Saved/Tools/UAssetNameLinter/`，受 UE 标准的 `Saved/` 忽略保护，不会被 VCS 追踪。
+输出生成到 `<UEProject>/Saved/UAssetNameLinter/`，受 UE 标准的 `Saved/` 忽略保护，不会被 VCS 追踪。
 
 ## 安装
 
@@ -170,7 +170,7 @@ Hook 只检查新增文件，所以存量永远不会被回查。Rename（SVN �
 ```ini
 # 输出位置，相对于自动检测出的 project root（最近的 *.uproject）
 [output]
-path = Saved/Tools/UAssetNameLinter
+path = Saved/UAssetNameLinter
 
 # 可选：显式覆盖 project root
 # 设置后会跳过 .uproject 自动检测

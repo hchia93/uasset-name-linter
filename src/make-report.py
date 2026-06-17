@@ -53,7 +53,7 @@ def resolve_project_root(cli_root, cfg):
 
 
 def resolve_output_dir(project_root, cfg):
-    rel = cfg.get('output', 'path', fallback='Saved/Tools/UAssetNameLinter')
+    rel = cfg.get('output', 'path', fallback='Saved/UAssetNameLinter')
     return (project_root / rel).resolve()
 
 

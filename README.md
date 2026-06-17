@@ -109,7 +109,7 @@ uasset-name-linter/
     vcs-hook.py                  Pre-commit hook implementation
 ```
 
-Output is generated to `<UEProject>/Saved/Tools/UAssetNameLinter/`, protected by UE's standard `Saved/` ignore convention so it won't be tracked by VCS.
+Output is generated to `<UEProject>/Saved/UAssetNameLinter/`, protected by UE's standard `Saved/` ignore convention so it won't be tracked by VCS.
 
 ## Installation
 
@@ -170,7 +170,7 @@ Currently SVN-only. Git support is planned.
 ```ini
 # Output location, resolved relative to the auto-detected project root (nearest *.uproject)
 [output]
-path = Saved/Tools/UAssetNameLinter
+path = Saved/UAssetNameLinter
 
 # Optional: explicit project root override.
 # When set, disables auto-detection of .uproject.

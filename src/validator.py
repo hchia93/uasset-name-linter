@@ -13,7 +13,7 @@
 #
 # Output location resolution:
 #   [output] path in Config/config.ini, joined to project root.
-#   Default: Saved/Tools/UAssetNameLinter/
+#   Default: Saved/UAssetNameLinter/
 
 import argparse
 import configparser
@@ -69,7 +69,7 @@ def resolve_project_root(cli_root, cfg):
 
 
 def resolve_output_dir(project_root, cfg):
-    rel = cfg.get('output', 'path', fallback='Saved/Tools/UAssetNameLinter')
+    rel = cfg.get('output', 'path', fallback='Saved/UAssetNameLinter')
     return (project_root / rel).resolve()
 
 
